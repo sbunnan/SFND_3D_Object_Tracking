@@ -5,6 +5,16 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+#include <pcl/io/pcd_io.h>
+#include <pcl/common/common.h>
+#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h>
+#include <pcl/kdtree/kdtree.h>
+#include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/segmentation/extract_clusters.h>
+#include <pcl/common/transforms.h>
+
 #include "camFusion.hpp"
 #include "dataStructures.h"
 
@@ -140,15 +150,132 @@ void computeTTCCamera(std::vector<cv::KeyPoint> &kptsPrev, std::vector<cv::KeyPo
     // ...
 }
 
+pcl::PointCloud<pcl::PointXYZ>::Ptr Clustering(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, float clusterTolerance, int minSize, int maxSize)
+{
+
+    // Time clustering process
+    auto startTime = std::chrono::steady_clock::now();
+    int point_cloud_size = 0;
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree(new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud(cloud);
+
+    std::vector<pcl::PointIndices> cluster_indices;
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    ec.setClusterTolerance(clusterTolerance); // 2cm
+    ec.setMinClusterSize(minSize);
+    ec.setMaxClusterSize(maxSize);
+    ec.setSearchMethod(tree);
+    ec.setInputCloud(cloud);
+    ec.extract(cluster_indices);
+    std::vector<pcl::PointIndices>::iterator indices_it;
+    // TODO:: Fill in the function to perform euclidean clustering to group detected obstacles
+    for (std::vector<pcl::PointIndices>::iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
+    {
+       
+        if (it->indices.size() > point_cloud_size)
+        {
+            point_cloud_size = it->indices.size();
+            indices_it = it;
+            /* code */
+        }
+    }
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cluster(new pcl::PointCloud<pcl::PointXYZ>());
+
+    for (auto pit = indices_it->indices.begin(); pit != indices_it->indices.end(); pit++)
+    {
+        cloud_cluster->points.push_back(cloud->points[*pit]);
+    }
+    cloud_cluster->width = cloud_cluster->points.size();
+    cloud_cluster->height = 1;
+    cloud_cluster->is_dense = true;
+
+    // std::cout << "PointCloud representing the Cluster: " << cloud_cluster->points.size() << " data points." << std::endl;
+    // clusters.push_back(cloud_cluster);
+
+    auto endTime = std::chrono::steady_clock::now();
+    auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    //std::cout << "clustering took " << elapsedTime.count() << " milliseconds and found " << cloud_cluster->points.size() << " clusters" << std::endl;
+
+    return cloud_cluster;
+}
+
 void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      std::vector<LidarPoint> &lidarPointsCurr, double frameRate, double &TTC)
 {
-    // ...
+    int lane_width = 4;
+    double prev_min_distance = (double)DBL_MAX;
+    double curr_min_distance = (double)DBL_MAX;
+    pcl::PointCloud<pcl::PointXYZ>::Ptr prev_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+    pcl::PointCloud<pcl::PointXYZ>::Ptr curr_cloud(new pcl::PointCloud<pcl::PointXYZ>());
+
+    for (std::vector<LidarPoint>::iterator it = lidarPointsPrev.begin(); it != lidarPointsPrev.end(); ++it)
+    {
+        prev_cloud->points.push_back(pcl::PointXYZ(it->x, it->y, it->z));
+    }
+    for (std::vector<LidarPoint>::iterator it = lidarPointsCurr.begin(); it != lidarPointsCurr.end(); ++it)
+    {
+        curr_cloud->points.push_back(pcl::PointXYZ(it->x, it->y, it->z));
+    }
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr refinedprevCluster = Clustering(prev_cloud, 0.1, 30, 3000);
+    pcl::PointCloud<pcl::PointXYZ>::Ptr refinedcurrCluster = Clustering(curr_cloud, 0.1, 30, 3000);
+
+    for (int index = 0; index < refinedprevCluster->points.size(); index++)
+    {
+        pcl::PointXYZ pt = refinedprevCluster->points.at(index);
+        //cout << "prev _points x,y" << pt.x << pt.y << endl;
+        if (fabs(pt.y) < lane_width / 2)
+        {
+            prev_min_distance = (pt.x < prev_min_distance) ? pt.x : prev_min_distance;
+        }
+    }
+
+    for (int index = 0; index < refinedcurrCluster->points.size(); index++)
+    {
+        pcl::PointXYZ pt = refinedcurrCluster->points.at(index);
+        //cout << "curr _points x,y" << pt.x << pt.y << endl;
+        if (fabs(pt.y) < lane_width / 2)
+        {
+            curr_min_distance = (pt.x < curr_min_distance) ? pt.x : curr_min_distance;
+        }
+    }
+    //cout << "prev_distance: " << prev_min_distance << "\t" << "curr_distance :" << curr_min_distance << endl;
+    double speed = fabs(curr_min_distance - prev_min_distance)* frameRate;
+    TTC = (double)curr_min_distance/speed;
+
+
 }
 
 void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bbBestMatches, DataFrame &prevFrame, DataFrame &currFrame)
 {
-    cout << "matches size :" << matches.size() << std::endl;
-    cout << "prev frame bounding box size" << prevFrame.boundingBoxes.size() << std::endl;
-    cout << "curr frame bounding box size" << currFrame.boundingBoxes.size() << std::endl;
+    // cout << "matches size :" << matches.size() << std::endl;
+    // cout << "prev frame bounding box size" << prevFrame.boundingBoxes.size() << std::endl;
+    // cout << "curr frame bounding box size" << currFrame.boundingBoxes.size() << std::endl;
+
+    for (auto prev_it = prevFrame.boundingBoxes.begin(); prev_it != prevFrame.boundingBoxes.end(); prev_it++)
+    {
+        std::map<int, int> local_map;
+        for (auto curr_it = currFrame.boundingBoxes.begin(); curr_it != currFrame.boundingBoxes.end(); curr_it++)
+        {
+            for (auto match_it = matches.begin(); match_it != matches.end(); ++match_it)
+            {
+                cv::Point2f prev_pt = prevFrame.keypoints[match_it->queryIdx].pt;
+                cv::Point2f curr_pt = currFrame.keypoints[match_it->trainIdx].pt;
+                if (prev_it->roi.contains(prev_pt) && curr_it->roi.contains(curr_pt))
+                {
+                    if (local_map.count(curr_it->boxID) == 0)
+                    {
+                        local_map[curr_it->boxID] = 1;
+                    }
+                    else
+                    {
+                        local_map[curr_it->boxID]++;
+                    }
+                }
+            }
+        }
+        auto max_pair = std::max_element(local_map.begin(), local_map.end(), [](const pair<int, int> &p1, const pair<int, int> &p2) { return p1.second < p2.second; });
+        bbBestMatches[prev_it->boxID] = max_pair->first;
+        //cout << "Best Pair" << prev_it->boxID << bbBestMatches[prev_it->boxID] << endl;
+    }
 }
