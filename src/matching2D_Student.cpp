@@ -9,7 +9,7 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource, std::vector<cv::Key
 {
     // configure matcher
     bool crossCheck = false;
-    bool bvis = false;
+    bool bvis = true;
     cv::Ptr<cv::DescriptorMatcher> matcher;
 
     if (matcherType.compare("MAT_BF") == 0)
@@ -75,7 +75,7 @@ void descKeypoints(vector<cv::KeyPoint> &keypoints, cv::Mat &img, cv::Mat &descr
 {
     //BRIEF, ORB, FREAK, AKAZE, SIFT
     // select appropriate descriptor
-    bool dvis = false;
+    bool dvis = true;
 
     cv::Ptr<cv::DescriptorExtractor> extractor;
     if (descriptorType.compare("BRISK") == 0)
