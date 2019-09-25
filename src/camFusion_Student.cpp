@@ -167,9 +167,9 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         total_dist = total_dist + dist;
     }
     double mean = total_dist / boundingBox.kptMatches.size();
-    cout << "mean" << mean << endl;
+    
     double local_dist = 0;
-    double deviation = mean * 1.2;
+    double deviation = mean * 1.3;
     for (std::vector<cv::DMatch>::iterator iter = boundingBox.kptMatches.begin(); iter != boundingBox.kptMatches.end();)
     {
         cv::Point2f prev_pt = kptsCurr[iter->trainIdx].pt;
@@ -183,7 +183,9 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox, std::vector<cv::KeyPoint
         {
             boundingBox.kptMatches.erase(iter);
         }
+       
     }
+    
 }
 
 // Compute time-to-collision (TTC) based on keypoint correspondences in successive images
@@ -326,8 +328,8 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
             curr_min_distance = (pt.x < curr_min_distance) ? pt.x : curr_min_distance;
         }
     }
-    cout << "prev_distance: " << prev_min_distance << "\t"
-         << "curr_distance :" << curr_min_distance << endl;
+    //cout << "prev_distance: " << prev_min_distance << "\t"
+         //<< "curr_distance :" << curr_min_distance << endl;
     // compute TTC from both measurements
     double dT = (1 / frameRate);
     TTC = curr_min_distance * dT / (prev_min_distance - curr_min_distance);
@@ -363,6 +365,6 @@ void matchBoundingBoxes(std::vector<cv::DMatch> &matches, std::map<int, int> &bb
         }
         auto max_pair = std::max_element(local_map.begin(), local_map.end(), [](const pair<int, int> &p1, const pair<int, int> &p2) { return p1.second < p2.second; });
         bbBestMatches[prev_it->boxID] = max_pair->first;
-        //cout << "Best Pair" << prev_it->boxID << bbBestMatches[prev_it->boxID] << endl;
+    cout << "Best Paired ID: Prev Frame :" << prev_it->boxID << "Current Frame :"<< bbBestMatches[prev_it->boxID] << endl;
     }
 }

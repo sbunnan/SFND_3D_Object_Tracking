@@ -108,7 +108,10 @@ int main(int argc, const char *argv[])
     bool bVis = false;                            // visualize results
 
     /* MAIN LOOP OVER ALL IMAGES */
-
+    std::vector<double> ttclidarVect;
+    std::vector<double> ttcCameraVect;
+    string glodetectorType; 
+    string glodescriptorType;
     for (size_t imgIndex = 0; imgIndex <= imgEndIndex - imgStartIndex; imgIndex += imgStepWidth)
     {
         /* LOAD IMAGE INTO BUFFER */
@@ -126,7 +129,7 @@ int main(int argc, const char *argv[])
         frame.cameraImg = img;
         dataBuffer.push_back(frame);
 
-        cout << "#1 : LOAD IMAGE INTO BUFFER done" << endl;
+        //cout << "#1 : LOAD IMAGE INTO BUFFER done" << endl;
 
         /* DETECT & CLASSIFY OBJECTS */
 
@@ -135,7 +138,7 @@ int main(int argc, const char *argv[])
         detectObjects((dataBuffer.end() - 1)->cameraImg, (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
                       yoloBasePath, yoloClassesFile, yoloModelConfiguration, yoloModelWeights, bVis);
 
-        cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
+        //cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
 
         /* CROP LIDAR POINTS */
 
@@ -150,7 +153,7 @@ int main(int argc, const char *argv[])
 
         (dataBuffer.end() - 1)->lidarPoints = lidarPoints;
 
-        cout << "#3 : CROP LIDAR POINTS done" << endl;
+        //cout << "#3 : CROP LIDAR POINTS done" << endl;
 
         /* CLUSTER LIDAR POINT CLOUD */
 
@@ -166,29 +169,29 @@ int main(int argc, const char *argv[])
         }
         bVis = false;
 
-        cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
+        //cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
 
         // REMOVE THIS LINE BEFORE PROCEEDING WITH THE FINAL PROJECT
-       // continue; // skips directly to the next image without processing what comes beneath
+        // continue; // skips directly to the next image without processing what comes beneath
 
         /* DETECT IMAGE KEYPOINTS */
 
         // convert current image to grayscale
         cv::Mat imgGray;
         cv::cvtColor((dataBuffer.end() - 1)->cameraImg, imgGray, cv::COLOR_BGR2GRAY);
-
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints; // create empty feature list for current image
-        string detectorType = "SHITOMASI";
+        //string detectorType = "SHITOMASI";
         //string detectorType = "HARRIS";
         //string detectorType = "FAST";
         //string detectorType = "BRISK";
         //string detectorType = "ORB";
-        //string detectorType = "AKAZE";
+        string detectorType = "AKAZE";
         //string detectorType = "SIFT";
         //// STUDENT ASSIGNMENT
         //// TASK MP.2 -> add the following keypoint detectors in file matching2D.cpp and enable string-based selection based on detectorType
         //// -> HARRIS, FAST, BRISK, ORB, AKAZE, SIFT
+        glodetectorType = detectorType;
         double t = (double)cv::getTickCount();
         if (detectorType.compare("SHITOMASI") == 0)
         {
@@ -220,23 +223,24 @@ int main(int argc, const char *argv[])
         // push keypoints and descriptor for current frame to end of data buffer
         (dataBuffer.end() - 1)->keypoints = keypoints;
 
-        cout << "#5 : DETECT KEYPOINTS done" << endl;
+        //cout << "#5 : DETECT KEYPOINTS done" << endl;
 
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
         cv::Mat descriptors;
-        string descriptorType = "BRISK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+        //string descriptorType = "BRISK"; // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
         //string descriptorType = "BRIEF";
         //string descriptorType = "ORB";
         //string descriptorType = "FREAK";
         //string descriptorType = "AKAZE";
-        //string descriptorType = "SIFT";
+        string descriptorType = "SIFT";
+        glodescriptorType =  descriptorType;
         descKeypoints((dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
 
         // push descriptors for current frame to end of data buffer
         (dataBuffer.end() - 1)->descriptors = descriptors;
 
-        cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
+        //cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
 
         if (dataBuffer.size() > 1) // wait until at least two images have been processed
         {
@@ -244,18 +248,18 @@ int main(int argc, const char *argv[])
             /* MATCH KEYPOINT DESCRIPTORS */
 
             vector<cv::DMatch> matches;
-            string matcherType = "MAT_BF";        // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY"; // DES_BINARY, DES_HOG
-            string selectorType = "SEL_NN";       // SEL_NN, SEL_KNN
+            string matcherType = "MAT_BF";         // MAT_BF, MAT_FLANN
+            string descriptorType_ = "DES_HOG"; // DES_BINARY, DES_HOG
+            string selectorType = "SEL_KNN";       // SEL_NN, SEL_KNN
 
             matchDescriptors((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
                              (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
-                             matches, descriptorType, matcherType, selectorType);
+                             matches, descriptorType_, matcherType, selectorType);
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
 
-            cout << "#7 : MATCH KEYPOINT DESCRIPTORS done" << endl;
+            //cout << "#7 : MATCH KEYPOINT DESCRIPTORS done" << endl;
 
             /* TRACK 3D OBJECT BOUNDING BOXES */
 
@@ -268,7 +272,7 @@ int main(int argc, const char *argv[])
             // store matches in current data frame
             (dataBuffer.end() - 1)->bbMatches = bbBestMatches;
 
-            cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
+            //cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
 
             /* COMPUTE TTC ON OBJECT IN FRONT */
 
@@ -309,7 +313,10 @@ int main(int argc, const char *argv[])
                     clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, (dataBuffer.end() - 1)->kptMatches);
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints, currBB->kptMatches, sensorFrameRate, ttcCamera);
                     //// EOF STUDENT ASSIGNMENT
-
+                    t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
+                    ttclidarVect.push_back(ttcLidar);
+                    ttcCameraVect.push_back(ttcCamera);
+                    cout << detectorType << ":" << descriptorType << " TTC Estimation : " << ttcLidar << " s" << endl;
                     bVis = true;
                     if (bVis)
                     {
@@ -334,6 +341,17 @@ int main(int argc, const char *argv[])
         }
 
     } // eof loop over all images
-
+    cout << glodetectorType << ',' << glodescriptorType << ',' << "TTC Lidar,";
+    for (std::vector<double>::iterator it = ttclidarVect.begin(); it != ttclidarVect.end(); it++)
+    {
+        cout << *it << ',';
+    }
+    cout << endl;
+    cout << glodetectorType << ',' << glodescriptorType << ',' << "TTC Camera,";
+    for (std::vector<double>::iterator it = ttcCameraVect.begin(); it != ttcCameraVect.end(); it++)
+    {
+        cout << *it << ',';
+    }
+    cout << endl;
     return 0;
 }
